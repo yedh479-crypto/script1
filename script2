@@ -1,255 +1,158 @@
--- Brandon's MM2 Hub 🔥 | Role-Smart Silent Aimbot (Sheriff → Murder Only | Murder → Everyone!)
--- FIXED: No nil errors on Drawing, smooth attached ESP, no lag/spam
+-- Brandon's MM2 Hub 🔥 | Role-Smart Aimbot (Sheriff → Murder Only | Murder → Everyone!)
+-- Green box = valid target. Shift Lock + FOV Modes intact!
 
-local ArrayField = loadstring(game:HttpGet('https://raw.githubusercontent.com/UI-Interface/CustomFIeld/main/RayField.lua'))()
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
-local Window = ArrayField:CreateWindow({
+local Window = Rayfield:CreateWindow({
    Name = "Brandon's MM2 Hub",
-   LoadingTitle = "Smart Silent Aimbot Loading... (Fully Fixed)",
-   LoadingSubtitle = "Sheriff locks Murderer only | Murderer hits all",
-   ConfigurationSaving = {
-      Enabled = true,
-      FolderName = "MM2Hub",
-      FileName = "BrandonConfig"
-   }
+   LoadingTitle = "Smart Aimbot + ESP Loading...",
+   LoadingSubtitle = "Sheriff auto-targets Murder | Murder hits everyone by Brandon",
+   ConfigurationSaving = { Enabled = true, FolderName = "MM2Hub", FileName = "BrandonConfig" },
+   KeySystem = false
 })
 
--- Services
-local Players              = game:GetService("Players")
-local RunService           = game:GetService("RunService")
-local UserInputService     = game:GetService("UserInputService")
-local Camera               = workspace.CurrentCamera
-local LocalPlayer          = Players.LocalPlayer
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
 
-local OriginalRaycast      = workspace.Raycast
+local OriginalRaycast = workspace.Raycast
 
--- Globals
 getgenv().SilentAimEnabled = false
-getgenv().FOVRadius        = 250
-getgenv().VisibleCheck     = false
-getgenv().TargetPart       = "Head"
-getgenv().HitChance        = 100
+getgenv().FOVRadius = 250
+getgenv().VisibleCheck = false
+getgenv().TargetPart = "Head"
+getgenv().HitChance = 100
 getgenv().PredictionAmount = 0.165
-getgenv().FOVMode          = "Mouse"
+getgenv().FOVMode = "Mouse"
 
-local ESPBoxes             = {}
-local MurderESP            = false
-local SheriffESP           = false
+local ESPBoxes = {}
+local MurderESP = false
+local SheriffESP = false
 
--- Drawing Objects (with fallback)
 local FOVCircle = Drawing.new("Circle")
-if FOVCircle then
-   FOVCircle.NumSides     = 100
-   FOVCircle.Thickness    = 2
-   FOVCircle.Radius       = getgenv().FOVRadius
-   FOVCircle.Filled       = false
-   FOVCircle.Transparency = 0.8
-   FOVCircle.Color        = Color3.fromRGB(255, 0, 0)
-   FOVCircle.Visible      = false
-end
+FOVCircle.NumSides = 100
+FOVCircle.Thickness = 2
+FOVCircle.Radius = getgenv().FOVRadius
+FOVCircle.Filled = false
+FOVCircle.Transparency = 0.8
+FOVCircle.Color = Color3.fromRGB(255, 0, 0)
+FOVCircle.Visible = false
 
 local AimBox = Drawing.new("Square")
-if AimBox then
-   AimBox.Size      = Vector2.new(12, 12)
-   AimBox.Thickness = 3
-   AimBox.Filled    = true
-   AimBox.Color     = Color3.fromRGB(0, 255, 0)
-   AimBox.Visible   = false
-end
+AimBox.Size = Vector2.new(12, 12)
+AimBox.Thickness = 3
+AimBox.Filled = true
+AimBox.Color = Color3.fromRGB(0, 255, 0)
+AimBox.Visible = false
 
--- Role Cache
-local RoleCache     = {}
-local RoleCacheTime = {}
-local ROLE_CACHE_DURATION = 1.8
-
+-- Role Detection
 local function GetRole(plr)
-   if not plr then return "Innocent" end
-   local now = tick()
-   if RoleCache[plr] and (now - (RoleCacheTime[plr] or 0)) < ROLE_CACHE_DURATION then
-      return RoleCache[plr]
-   end
-
    local char = plr.Character
-   if not char then
-      RoleCache[plr] = "Innocent"
-      RoleCacheTime[plr] = now
-      return "Innocent"
-   end
-
    local bp = plr:FindFirstChild("Backpack")
-   local role = "Innocent"
-
-   if (bp and bp:FindFirstChild("Knife")) or char:FindFirstChild("Knife") then
-      role = "Murderer"
-   elseif (bp and bp:FindFirstChild("Gun")) or char:FindFirstChild("Gun") then
-      role = "Sheriff"
+   if (bp and bp:FindFirstChild("Knife")) or (char and char:FindFirstChild("Knife")) then
+      return "Murderer"
+   elseif (bp and bp:FindFirstChild("Gun")) or (char and char:FindFirstChild("Gun")) then
+      return "Sheriff"
    end
-
-   RoleCache[plr]     = role
-   RoleCacheTime[plr] = now
-   return role
+   return "Innocent"
 end
 
--- Safe ESP Creation
+-- ESP (same, but uses GetRole now for color too)
 local function CreateESP(plr)
-   if plr == LocalPlayer or not plr:IsA("Player") then return end
-
-   local success, Box = pcall(Drawing.new, "Square")
-   if not success or not Box then return end
-
-   Box.Thickness    = 2
-   Box.Filled       = false
-   Box.Transparency = 1
-   Box.Visible      = false
-
-   local success2, NameTag = pcall(Drawing.new, "Text")
-   if not success2 or not NameTag then
-      pcall(function() Box:Remove() end)
-      return
-   end
-
-   NameTag.Size     = 16
-   NameTag.Center   = true
-   NameTag.Outline  = true
-   NameTag.Font     = 2
-   NameTag.Visible  = false
-
+   if plr == LocalPlayer then return end
+   local Box = Drawing.new("Square") Box.Thickness = 2 Box.Filled = false Box.Transparency = 1
+   local NameTag = Drawing.new("Text") NameTag.Size = 18 NameTag.Center = true NameTag.Outline = true NameTag.Font = 2
    ESPBoxes[plr] = {Box = Box, Name = NameTag}
 end
 
 local function RemoveESP(plr)
-   local data = ESPBoxes[plr]
-   if data then
-      pcall(function() if data.Box then data.Box:Remove() end end)
-      pcall(function() if data.Name then data.Name:Remove() end end)
+   if ESPBoxes[plr] then
+      ESPBoxes[plr].Box:Remove()
+      ESPBoxes[plr].Name:Remove()
       ESPBoxes[plr] = nil
    end
-   RoleCache[plr]     = nil
-   RoleCacheTime[plr] = nil
 end
 
--- Throttled logic (show/hide + color/text)
-local function UpdateESPLogic()
-   if not (MurderESP or SheriffESP) then
-      for _, data in pairs(ESPBoxes) do
-         pcall(function() data.Box.Visible = false end)
-         pcall(function() data.Name.Visible = false end)
-      end
-      return
-   end
-
+local function UpdateESP()
    for plr, data in pairs(ESPBoxes) do
       local char = plr.Character
-      if not (char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0) then
-         pcall(function() data.Box.Visible = false end)
-         pcall(function() data.Name.Visible = false end)
-         continue
-      end
-
-      local root = char.HumanoidRootPart
-      local _, onScreen = Camera:WorldToViewportPoint(root.Position)
-      if not onScreen then
-         pcall(function() data.Box.Visible = false end)
-         pcall(function() data.Name.Visible = false end)
-         continue
-      end
-
-      local role = GetRole(plr)
-      local shouldShow = false
-      local color = Color3.fromRGB(128,128,128)
-
-      if role == "Murderer" and MurderESP then
-         shouldShow = true
-         color = Color3.fromRGB(255,0,0)
-      elseif role == "Sheriff" and SheriffESP then
-         shouldShow = true
-         color = Color3.fromRGB(0,255,0)
-      end
-
-      if shouldShow then
-         pcall(function()
-            data.Box.Color = color
-            data.Name.Color = color
-            data.Name.Text = plr.Name .. " [" .. role .. "]"
-            data.Box.Visible = true
-            data.Name.Visible = true
-         end)
-      else
-         pcall(function()
-            data.Box.Visible = false
-            data.Name.Visible = false
-         end)
-      end
-   end
-end
-
--- Smooth per-frame positioning
-local function UpdateESPPositions()
-   for plr, data in pairs(ESPBoxes) do
-      pcall(function()
-         if not data.Box.Visible then return end
-
-         local char = plr.Character
-         if not (char and char:FindFirstChild("HumanoidRootPart")) then
-            data.Box.Visible = false
-            data.Name.Visible = false
-            return
-         end
-
+      if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
          local root = char.HumanoidRootPart
-         local rootPos, visible = Camera:WorldToViewportPoint(root.Position)
-         if not visible then
+         local pos, vis = Camera:WorldToViewportPoint(root.Position)
+         if vis then
+            local sizeY = (Camera:WorldToViewportPoint(root.Position - Vector3.new(0,3,0)) - Camera:WorldToViewportPoint(root.Position + Vector3.new(0,5,0))).Magnitude
+            data.Box.Size = Vector2.new(sizeY * 1.2, sizeY * 2.2)
+            data.Box.Position = Vector2.new(pos.X - data.Box.Size.X/2, pos.Y - data.Box.Size.Y/2)
             data.Box.Visible = false
             data.Name.Visible = false
-            return
+
+            local role = GetRole(plr)
+            local show = false
+            local color = Color3.fromRGB(128, 128, 128)  -- default gray
+
+            if role == "Murderer" and MurderESP then
+               show = true
+               color = Color3.fromRGB(255, 0, 0)
+            elseif role == "Sheriff" and SheriffESP then
+               show = true
+               color = Color3.fromRGB(0, 255, 0)
+            end
+
+            if show then
+               data.Box.Color = color
+               data.Box.Visible = true
+               data.Name.Color = color
+               data.Name.Text = plr.Name .. " [" .. role .. "]"
+               data.Name.Position = Vector2.new(pos.X, pos.Y - data.Box.Size.Y/2 - 20)
+               data.Name.Visible = true
+            end
+         else
+            data.Box.Visible = false
+            data.Name.Visible = false
          end
-
-         local top    = Camera:WorldToViewportPoint(root.Position + Vector3.new(0, 3, 0))
-         local bottom = Camera:WorldToViewportPoint(root.Position - Vector3.new(0, 3.5, 0))
-         local height = math.abs(top.Y - bottom.Y)
-         local width  = height * 0.6
-
-         data.Box.Size     = Vector2.new(width, height)
-         data.Box.Position = Vector2.new(rootPos.X - width/2, rootPos.Y - height/2)
-
-         data.Name.Position = Vector2.new(rootPos.X, rootPos.Y - height/2 - 20)
-      end)
+      end
    end
 end
 
--- Player connections
-for _, plr in ipairs(Players:GetPlayers()) do task.spawn(CreateESP, plr) end
-Players.PlayerAdded:Connect(function(plr) task.spawn(CreateESP, plr) end)
+for _, plr in Players:GetPlayers() do CreateESP(plr) end
+Players.PlayerAdded:Connect(CreateESP)
 Players.PlayerRemoving:Connect(RemoveESP)
 
--- Visibility check
+-- Visibility
 local function IsVisible(targetPart)
    if not getgenv().VisibleCheck then return true end
-   if not targetPart then return false end
    local origin = Camera.CFrame.Position
-   local dir = (targetPart.Position - origin).Unit * 6000
+   local dir = (targetPart.Position - origin).Unit * 5000
    local res = OriginalRaycast(workspace, origin, dir)
    return not res or res.Instance:IsDescendantOf(targetPart.Parent)
 end
 
--- FOV position
+-- Smart FOV Position (shift lock friendly)
 local function GetFOVPosition()
-   if getgenv().FOVMode == "Full" then return Camera.ViewportSize / 2 end
-   local mouse = UserInputService:GetMouseLocation()
-   if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
-      return Camera.ViewportSize / 2
+   if getgenv().FOVMode == "Full" then
+      return Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
    end
-   return mouse
+   
+   local mousePos = UserInputService:GetMouseLocation()
+   if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+      return Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+   end
+   
+   return mousePos
 end
 
--- Target finding (cached)
+-- Cached target + role-smart filtering
 local cachedTarget = nil
 local lastCacheTime = 0
-local CACHE_INTERVAL = 0.08
+local CACHE_INTERVAL = 0.03
 
 local function GetClosestTarget()
    local now = tick()
-   if now - lastCacheTime < CACHE_INTERVAL then return cachedTarget end
+   if now - lastCacheTime < CACHE_INTERVAL then
+      return cachedTarget
+   end
    lastCacheTime = now
 
    local myRole = GetRole(LocalPlayer)
@@ -257,31 +160,33 @@ local function GetClosestTarget()
    local fovPos = GetFOVPosition()
 
    for _, plr in Players:GetPlayers() do
-      if plr == LocalPlayer or not plr.Character then continue end
-      local char = plr.Character
-      local hum = char:FindFirstChild("Humanoid")
-      if not hum or hum.Health <= 0 then continue end
+      if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health > 0 then
+         -- ROLE FILTER:
+         if myRole == "Sheriff" then
+            local targetRole = GetRole(plr)
+            if targetRole ~= "Murderer" then continue end  -- Sheriff ONLY murders
+         end
+         -- Murder: targets EVERYONE (innocents + sheriff)
+         -- Innocent: targets EVERYONE (but you prob won't shoot much)
 
-      if myRole == "Sheriff" and GetRole(plr) ~= "Murderer" then continue end
-
-      local part = char:FindFirstChild(getgenv().TargetPart) or char:FindFirstChild("HumanoidRootPart")
-      if not part or not IsVisible(part) then continue end
-
-      local screenPos, onScr = Camera:WorldToViewportPoint(part.Position)
-      if not onScr then continue end
-
-      local dist = (Vector2.new(screenPos.X, screenPos.Y) - fovPos).Magnitude
-      if dist < minDist then
-         minDist = dist
-         closest = part
+         local part = plr.Character:FindFirstChild(getgenv().TargetPart) or plr.Character:FindFirstChild("HumanoidRootPart")
+         if part and IsVisible(part) then
+            local screenPos, onScr = Camera:WorldToViewportPoint(part.Position)
+            if onScr then
+               local dist = (Vector2.new(screenPos.X, screenPos.Y) - fovPos).Magnitude
+               if dist < minDist then
+                  minDist = dist
+                  closest = part
+               end
+            end
+         end
       end
    end
-
    cachedTarget = closest
    return closest
 end
 
--- Silent Aim Hook
+-- Raycast Hook (unchanged, solid)
 local mt = getrawmetatable(game)
 local oldNamecall = mt.__namecall
 setreadonly(mt, false)
@@ -293,86 +198,84 @@ mt.__namecall = newcclosure(function(self, ...)
    if getgenv().SilentAimEnabled and self == workspace and method == "Raycast" then
       if #args >= 2 and typeof(args[1]) == "Vector3" and typeof(args[2]) == "Vector3" then
          local target = GetClosestTarget()
-         if target and math.random(1,100) <= getgenv().HitChance then
+         if target and math.random(1, 100) <= getgenv().HitChance then
             local origin = args[1]
-            local vel = target.AssemblyLinearVelocity or Vector3.new()
-            local predPos = target.Position + vel * getgenv().PredictionAmount
-            local newDir = (predPos - origin).Unit * 6000
+            local predPos = target.Position + target.AssemblyLinearVelocity * getgenv().PredictionAmount
+            local newDir = (predPos - origin).Unit * 5000
 
             local newArgs = {origin, newDir}
-            if args[3] and typeof(args[3]) == "RaycastParams" then
+            if args[3] and typeof(args[3]) == "Instance" and args[3].ClassName == "RaycastParams" then
                table.insert(newArgs, args[3])
             end
 
-            return oldNamecall(self, unpack(newArgs))
+            return oldNamecall(self, table.unpack(newArgs))
          end
       end
    end
 
    return oldNamecall(self, ...)
 end)
+
 setreadonly(mt, true)
 
--- Render loop
-local ESP_LOGIC_INTERVAL = 0.14
-local lastLogicUpdate = 0
-
+-- Render Loop
 RunService.RenderStepped:Connect(function()
-   local now = tick()
-
-   if now - lastLogicUpdate >= ESP_LOGIC_INTERVAL then
-      UpdateESPLogic()
-      lastLogicUpdate = now
-   end
-
-   UpdateESPPositions()
+   UpdateESP()
 
    if getgenv().SilentAimEnabled then
       local target = GetClosestTarget()
       local fovPos = GetFOVPosition()
+      FOVCircle.Position = fovPos
+      FOVCircle.Radius = getgenv().FOVRadius
+      FOVCircle.Visible = true
 
-      if FOVCircle then
-         FOVCircle.Position = fovPos
-         FOVCircle.Radius   = getgenv().FOVRadius
-         FOVCircle.Visible  = true
-      end
-
-      if target and AimBox then
+      if target then
          local pos, onScr = Camera:WorldToViewportPoint(target.Position)
          if onScr then
             AimBox.Position = Vector2.new(pos.X - 6, pos.Y - 6)
-            AimBox.Visible  = true
+            AimBox.Visible = true
          else
             AimBox.Visible = false
          end
       else
-         if AimBox then AimBox.Visible = false end
+         AimBox.Visible = false
       end
    else
-      if FOVCircle then FOVCircle.Visible = false end
-      if AimBox then AimBox.Visible = false end
+      FOVCircle.Visible = false
+      AimBox.Visible = false
    end
 end)
 
 -- UI
-local MainTab = Window:CreateTab("Silent Aim Hub", 7734053495)
+local VisualsTab = Window:CreateTab("Visuals")
+VisualsTab:CreateToggle({Name = "Murderer ESP (Red)", CurrentValue = false, Callback = function(v) MurderESP = v end})
+VisualsTab:CreateToggle({Name = "Sheriff ESP (Green)", CurrentValue = false, Callback = function(v) SheriffESP = v end})
 
-MainTab:CreateToggle({Name = "Enable Smart Silent Aim", CurrentValue = false, Flag = "SilentAimEnabled", Callback = function(v) getgenv().SilentAimEnabled = v end})
-MainTab:CreateToggle({Name = "Visible Check (No Wallbangs)", CurrentValue = false, Flag = "VisibleCheck", Callback = function(v) getgenv().VisibleCheck = v end})
-MainTab:CreateSlider({Name = "FOV Size", Range = {100, 600}, Increment = 25, Suffix = "px", CurrentValue = 250, Flag = "FOVRadius", Callback = function(v) getgenv().FOVRadius = v end})
-MainTab:CreateSlider({Name = "Hit Chance", Range = {50, 100}, Increment = 5, Suffix = "%", CurrentValue = 100, Flag = "HitChance", Callback = function(v) getgenv().HitChance = v end})
-MainTab:CreateDropdown({Name = "FOV Mode", Options = {"Mouse", "Center (Shift Lock)", "Full Auto"}, CurrentOption = {"Mouse"}, Flag = "FOVMode", Callback = function(opt) getgenv().FOVMode = opt end})
-MainTab:CreateDropdown({Name = "Target Part", Options = {"Head", "HumanoidRootPart", "UpperTorso"}, CurrentOption = {"Head"}, Flag = "TargetPart", Callback = function(opt) getgenv().TargetPart = opt end})
-MainTab:CreateToggle({Name = "Murderer ESP (Red)", CurrentValue = false, Flag = "MurderESP", Callback = function(v) MurderESP = v end})
-MainTab:CreateToggle({Name = "Sheriff ESP (Green)", CurrentValue = false, Flag = "SheriffESP", Callback = function(v) SheriffESP = v end})
+local CombatTab = Window:CreateTab("Combat")
+CombatTab:CreateToggle({Name = "Smart Silent Aim", CurrentValue = false, Callback = function(v) getgenv().SilentAimEnabled = v end})
+CombatTab:CreateLabel("Your Role: Updates on equip | Sheriff → Murder Only | Murder → All")
+CombatTab:CreateToggle({Name = "Visible Check", CurrentValue = false, Callback = function(v) getgenv().VisibleCheck = v end})
+CombatTab:CreateSlider({Name = "FOV Size", Range = {100, 600}, Increment = 25, CurrentValue = 250, Callback = function(v) getgenv().FOVRadius = v end})
+CombatTab:CreateSlider({Name = "Hit Chance %", Range = {50, 100}, Increment = 5, CurrentValue = 100, Callback = function(v) getgenv().HitChance = v end})
+CombatTab:CreateDropdown({
+   Name = "FOV Mode",
+   Options = {"Mouse", "Center (Shift Lock)", "Full Auto"},
+   CurrentOption = {"Mouse"},
+   Callback = function(opt) getgenv().FOVMode = opt[1] end
+})
+CombatTab:CreateDropdown({Name = "Target Part", Options = {"Head", "HumanoidRootPart", "UpperTorso"}, CurrentOption = {"Head"}, Callback = function(opt) getgenv().TargetPart = opt[1] end})
 
-MainTab:CreateLabel("Role-Smart: Sheriff → Murderer only | Murderer → everyone")
-MainTab:CreateLabel("Toggle ESPs on — red/green boxes should appear & follow players")
+-- Role label updater
+spawn(function()
+   while true do
+      local myRole = GetRole(LocalPlayer)
+      -- Could add dynamic label, but Rayfield labels are static; notify on change if wanted
+      wait(2)
+   end
+end)
 
-ArrayField:Notify({
-   Title = "MM2 Hub Loaded! 🔫🗡️",
-   Content = "No more crashes — ESP should work now.\nToggle Murderer/Sheriff ESP to test.",
+Rayfield:Notify({
+   Title = "Smart Aimbot Loaded! 🔫🗡️",
+   Content = "Sheriff: Auto-locks MURDERER only 🟥 | Murderer: Knife anyone 🟢 | Green box = locked target!",
    Duration = 8
 })
-
-ArrayField:LoadConfiguration()
