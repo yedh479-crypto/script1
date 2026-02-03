@@ -1,0 +1,126 @@
+-- 1+ Speed Keyboard | Rayfield UI TP Bypass (Bypasses Ripoff AC)
+-- Coords: 2032.16, 543.95, -1629.51
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "1+ Speed Keyboard TP Bypass",
+    LoadingTitle = "Loading...",
+    LoadingSubtitle = "Speed + NoClip + Wins TP",
+    ConfigurationSaving = {Enabled = true},
+})
+
+local Tab = Window:CreateTab("Main")
+
+local player = game.Players.LocalPlayer
+local Run = game:GetService("RunService")
+
+-- Anti-Kick (basic)
+local mt = getrawmetatable(game)
+setreadonly(mt, false)
+local old = mt.__namecall
+mt.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    if method == "Kick" or tostring(self):find("AntiCheat") then return end
+    return old(self, ...)
+end)
+setreadonly(mt, true)
+
+-- Speed Slider
+local speedVal = 50
+Tab:CreateSlider({
+    Name = "WalkSpeed",
+    Range = {16, 1000},
+    Increment = 10,
+    CurrentValue = 50,
+    Callback = function(v)
+        speedVal = v
+        pcall(function()
+            if player.Character and player.Character:FindFirstChild("Humanoid") then
+                player.Character.Humanoid.WalkSpeed = v
+            end
+        end)
+    end
+})
+
+player.CharacterAdded:Connect(function(char)
+    char:WaitForChild("Humanoid").WalkSpeed = speedVal
+end)
+
+pcall(function()
+    if player.Character then
+        player.Character:WaitForChild("Humanoid").WalkSpeed = speedVal
+    end
+end)
+
+-- NoClip Toggle
+Tab:CreateToggle({
+    Name = "NoClip",
+    CurrentValue = false,
+    Callback = function(v)
+        if v then
+            Run.Stepped:Connect(function()
+                if player.Character then
+                    for _, p in pairs(player.Character:GetDescendants()) do
+                        if p:IsA("BasePart") then p.CanCollide = false end
+                    end
+                end
+            end)
+        end
+    end
+})
+
+-- TP Section
+Tab:CreateSection("Auto TP to Wins Spot")
+
+local tpCFrame = CFrame.new(2032.16, 543.95, -1629.51)
+
+Tab:CreateButton({
+    Name = "Teleport to Wins Spot (Once)",
+    Callback = function()
+        pcall(function()
+            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                player.Character.HumanoidRootPart.CFrame = tpCFrame
+            end
+        end)
+    end
+})
+
+local autoTP = false
+local delay = 2
+
+Tab:CreateToggle({
+    Name = "Auto TP (Bypass Failsafe)",
+    CurrentValue = false,
+    Callback = function(v)
+        autoTP = v
+        spawn(function()
+            while autoTP do
+                pcall(function()
+                    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        player.Character.HumanoidRootPart.CFrame = tpCFrame
+                    end
+                end)
+                wait(delay)
+            end
+        end)
+    end
+})
+
+Tab:CreateSlider({
+    Name = "TP Delay (seconds)",
+    Range = {0.5, 5},
+    Increment = 0.1,
+    CurrentValue = 2,
+    Callback = function(v)
+        delay = v
+    end
+})
+
+Rayfield:Notify({
+    Title = "Loaded! ⚡",
+    Content = "Toggle Auto TP to farm wins. Speed & NoClip ready.",
+    Duration = 6
+})
+
+print("Rayfield UI loaded - tabs should show now!")
